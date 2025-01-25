@@ -1,0 +1,10 @@
+from flask import Blueprint
+from flask_restful import Api
+
+from controller.prediction import SavePrediction, ViewPrediction
+
+bp = Blueprint("predict", __name__, url_prefix="/predict")
+api = Api(bp)
+
+api.add_resource(SavePrediction, "/")
+api.add_resource(ViewPrediction, "/")
