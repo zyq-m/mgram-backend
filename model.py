@@ -27,6 +27,7 @@ class Prediction(db.Model):
     __tablename__ = "predictions"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    ic_no = db.Column(db.String(12), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship("User", backref="prediction")
@@ -36,7 +37,6 @@ class BIRADSImage(db.Model):
     __tablename__ = "birads_images"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     img_name = db.Column(db.Text, nullable=False)
-    img_path = db.Column(db.Text, nullable=False)
     prediction_id = db.Column(
         db.Integer, db.ForeignKey("predictions.id"), nullable=False
     )
@@ -48,7 +48,7 @@ class BIRADSPrediction(db.Model):
     __tablename__ = "birads_predictions"
     birads_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     img_id = db.Column(db.Integer, db.ForeignKey("birads_images.id"), nullable=False)
-    birads_category = db.Column(db.Integer, nullable=False)
+    birads_category = db.Column(db.String(10), nullable=False)
     accuracy = db.Column(db.Float, nullable=False)
 
     image = db.relationship("BIRADSImage", backref="biradPrediction")

@@ -1,43 +1,82 @@
-from flask import request, jsonify
-from flask_restful import Resource
+from flask import request, jsonify, current_app
+from flask_restful import Resource, reqparse, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from model import User, Prediction, BIRADSImage, BIRADSPrediction
+from model import Prediction, BIRADSImage, BIRADSPrediction
 from extensions import db
+from utils.uploadImg import upload
+from utils.mgram_v2 import predict_image
+from PIL import Image
+import numpy as np
+import tensorflow as tf
+from werkzeug.utils import secure_filename
+import os
+
+parser = reqparse.RequestParser()
+parser.add_argument("ic_no", type=str, help="help")
+predictFields = {"ic_no": fields.String}
+
+
+def preprocess(files):
+    images = []
+    for file in files:
+        img = Image.open(file.stream).convert("RGB")
+        img_array = np.array(img)
+        img_tensor = tf.convert_to_tensor(img_array, dtype=tf.float32)
+        images.append((img_tensor, file.filename))
+
+    return predict_image(images)
+
+
+class PredictImage(Resource):
+    @jwt_required()
+    def post(self):
+        if "birad_images" not in request.files:
+            return "empty", 400
+
+        files = request.files.getlist("birad_images")
+        predictions = preprocess(files)
+
+        return jsonify(predictions), 201
 
 
 class SavePrediction(Resource):
     @jwt_required()
     def post(self):
-        data = request.get_json()
         current_user = get_jwt_identity()
 
-        input_image = data.get("input_image")
-        result = data.get("result")
-        birads_predictions = data.get("birads_predictions")
+        if "birad_images" not in request.files:
+            return "empty", 400
 
-        if not input_image or not result or not birads_predictions:
-            return {
-                "message": "Input image, result, and BI-RADS predictions are required"
-            }, 400
+        files = request.files.getlist("birad_images")
+        ic_no = request.form.get("ic_no")
 
-        new_prediction = Prediction(
-            user_id=current_user, input_image=input_image, result=result
-        )
-        db.session.add(new_prediction)
+        predictions = preprocess(files)
+
+        # save to db
+        new_prediction = Prediction(user_id=current_user, ic_no=ic_no)
+
+        images = []
+        for file in files:
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(current_app.config["UPLOAD_FOLDER"], filename))
+            images.append(BIRADSImage(img_name=filename, prediction=new_prediction))
+
+        prediction_res = []
+        for item in predictions:
+            for prediction in item["prediction"]:
+                for img in images:
+                    prediction_res.append(
+                        BIRADSPrediction(
+                            birads_category=prediction["birad"],
+                            accuracy=prediction["accuracy"],
+                            image=img,
+                        )
+                    )
+
+        db.session.add_all([new_prediction, *images, *prediction_res])
         db.session.commit()
 
-        for birads_data in birads_predictions:
-            birads_prediction = BIRADSPrediction(
-                prediction_id=new_prediction.id,
-                birads_category=birads_data["birads_category"],
-                accuracy=birads_data["accuracy"],
-                image=birads_data["image"],
-            )
-            db.session.add(birads_prediction)
-
-        db.session.commit()
-
-        return {"message": "Prediction stored successfully"}, 201
+        return jsonify({"message": "Prediction stored successfully"}), 201
 
 
 class ViewPrediction(Resource):
