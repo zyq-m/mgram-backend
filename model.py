@@ -31,6 +31,7 @@ class Prediction(db.Model):
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship("User", backref="prediction")
+    images = db.relationship("BIRADSImage", backref="prediction")
 
 
 class BIRADSImage(db.Model):
@@ -40,8 +41,9 @@ class BIRADSImage(db.Model):
     prediction_id = db.Column(
         db.Integer, db.ForeignKey("predictions.id"), nullable=False
     )
+    result = db.Column(db.String(10), nullable=False)
 
-    prediction = db.relationship("Prediction", backref="image")
+    img_prediction = db.relationship("Prediction", backref="image")
 
 
 class BIRADSPrediction(db.Model):

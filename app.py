@@ -1,5 +1,5 @@
 from datetime import timedelta
-from flask import Flask
+from flask import Flask, send_from_directory
 from routes import auth, prediction
 from extensions import db, f_bcrypt, cors, jwt
 
@@ -20,6 +20,12 @@ cors.init_app(app)
 
 app.register_blueprint(auth.bp)
 app.register_blueprint(prediction.bp)
+
+
+@app.route("/images/<string:name>")
+def serve(name):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], name)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

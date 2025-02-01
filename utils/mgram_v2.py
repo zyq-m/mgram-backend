@@ -63,7 +63,7 @@ def predict_image(images):
         highest_acc = max(list, key=lambda x: x["accuracy"])["birad"]
 
         predictions.append(
-            {"name": filename, "prediction": list, "highest": highest_acc}
+            {"name": filename, "biradPrediction": list, "highest": highest_acc}
         )
 
     return predictions

@@ -1,9 +1,8 @@
-from flask import request, jsonify, current_app
-from flask_restful import Resource, reqparse, fields
+from flask import request, current_app
+from flask_restful import Resource, reqparse, fields, marshal_with
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from model import Prediction, BIRADSImage, BIRADSPrediction
 from extensions import db
-from utils.uploadImg import upload
 from utils.mgram_v2 import predict_image
 from PIL import Image
 import numpy as np
@@ -13,7 +12,11 @@ import os
 
 parser = reqparse.RequestParser()
 parser.add_argument("ic_no", type=str, help="help")
-predictFields = {"ic_no": fields.String}
+predictionFields = {
+    "id": fields.String,
+    "icNo": fields.String(attribute="ic_no"),
+    "timestamp": fields.String(attribute="created_at"),
+}
 
 
 def preprocess(files):
@@ -29,6 +32,12 @@ def preprocess(files):
 
 class PredictImage(Resource):
     @jwt_required()
+    @marshal_with(predictionFields)
+    def get(self):
+        predictions = Prediction.query.all()
+        return predictions, 200
+
+    @jwt_required()
     def post(self):
         if "birad_images" not in request.files:
             return "empty", 400
@@ -36,7 +45,7 @@ class PredictImage(Resource):
         files = request.files.getlist("birad_images")
         predictions = preprocess(files)
 
-        return jsonify(predictions), 201
+        return predictions, 201
 
 
 class SavePrediction(Resource):
@@ -50,62 +59,70 @@ class SavePrediction(Resource):
         files = request.files.getlist("birad_images")
         ic_no = request.form.get("ic_no")
 
-        predictions = preprocess(files)
-
-        # save to db
-        new_prediction = Prediction(user_id=current_user, ic_no=ic_no)
-
-        images = []
         for file in files:
             filename = secure_filename(file.filename)
             file.save(os.path.join(current_app.config["UPLOAD_FOLDER"], filename))
-            images.append(BIRADSImage(img_name=filename, prediction=new_prediction))
 
-        prediction_res = []
-        for item in predictions:
-            for prediction in item["prediction"]:
-                for img in images:
-                    prediction_res.append(
-                        BIRADSPrediction(
-                            birads_category=prediction["birad"],
-                            accuracy=prediction["accuracy"],
-                            image=img,
-                        )
-                    )
+        predictions = preprocess(files)
+        # response = [
+        #     {
+        #         "name": "birads10.jpg",
+        #         "biradPrediction": [
+        #             {"birad": "BIRADS1", "accuracy": 47.54},
+        #             {"birad": "BIRADS3", "accuracy": 17.49},
+        #             {"birad": "BIRADS4", "accuracy": 17.49},
+        #             {"birad": "BIRADS5", "accuracy": 17.49},
+        #         ],
+        #         "highest": "BIRADS1",
+        #     }
+        #     ...
+        # ]
 
-        db.session.add_all([new_prediction, *images, *prediction_res])
+        # save to db
+        new_prediction = Prediction(user_id=current_user["id"], ic_no=ic_no)
+        db.session.add(new_prediction)
+
+        for pred in predictions:
+            x = BIRADSImage(
+                img_name=pred["name"],
+                img_prediction=new_prediction,
+                result=pred["highest"],
+            )
+            db.session.add(x)
+
+            for birad in pred["biradPrediction"]:
+                y = BIRADSPrediction(
+                    birads_category=birad["birad"], accuracy=birad["accuracy"], image=x
+                )
+                db.session.add(y)
+
         db.session.commit()
 
-        return jsonify({"message": "Prediction stored successfully"}), 201
+        return {"message": "Prediction stored successfully"}, 201
+
+
+detailPrediction = {
+    **predictionFields,
+    "images": fields.Nested(
+        {
+            "id": fields.String,
+            "name": fields.String(attribute="img_name"),
+            "highest": fields.String(attribute="result"),
+            "biradPrediction": fields.Nested(
+                {
+                    "id": fields.String(attribute="birads_id"),
+                    "birad": fields.String(attribute="birads_category"),
+                    "accuracy": fields.Float,
+                }
+            ),
+        }
+    ),
+}
 
 
 class ViewPrediction(Resource):
     @jwt_required()
-    def get(self):
-        current_user = get_jwt_identity()
-        user_predictions = Prediction.query.filter_by(user_id=current_user).all()
-
-        predictions_list = []
-        for prediction in user_predictions:
-            birads_predictions = BIRADSPrediction.query.filter_by(
-                prediction_id=prediction.id
-            ).all()
-            birads_list = [
-                {
-                    "birads_category": bp.birads_category,
-                    "accuracy": bp.accuracy,
-                    "image": bp.image,
-                }
-                for bp in birads_predictions
-            ]
-            predictions_list.append(
-                {
-                    "prediction_id": prediction.id,
-                    "input_image": prediction.input_image,
-                    "result": prediction.result,
-                    "created_at": prediction.created_at,
-                    "birads_predictions": birads_list,
-                }
-            )
-
-        return jsonify(predictions_list)
+    @marshal_with(detailPrediction)
+    def get(self, id):
+        prediction = Prediction.query.filter_by(id=id).first()
+        return prediction, 200

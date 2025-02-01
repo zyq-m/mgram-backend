@@ -8,4 +8,4 @@ api = Api(bp)
 
 api.add_resource(PredictImage, "")
 api.add_resource(SavePrediction, "/save")
-api.add_resource(ViewPrediction, "")
+api.add_resource(ViewPrediction, "/<int:id>")
