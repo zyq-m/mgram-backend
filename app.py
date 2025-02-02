@@ -2,8 +2,13 @@ from datetime import timedelta
 from flask import Flask, send_from_directory
 from routes import auth, prediction
 from extensions import db, f_bcrypt, cors, jwt
+import logging
 
 app = Flask(__name__)
+
+app.logger.setLevel(logging.INFO)  # Set log level to INFO
+handler = logging.FileHandler("app.log")  # Log to a file
+app.logger.addHandler(handler)
 
 app.config.from_prefixed_env()
 app.config["SQLALCHEMY_DATABASE_URI"] = "mysql://root@localhost/mgram_dev"

@@ -33,7 +33,12 @@ class UserLogin(Resource):
             return {"message": "Email and password required"}, 400
 
         user = User.query.filter_by(email=email).first()
-        identity = {"id": user.id, "role": user.role}
+        identity = {
+            "id": user.id,
+            "role": user.role,
+            "email": user.email,
+            "name": user.name,
+        }
 
         if user and f_bcrypt.check_password_hash(user.password, password):
             access_token = create_access_token(identity=identity)

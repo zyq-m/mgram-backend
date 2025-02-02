@@ -34,17 +34,20 @@ class PredictImage(Resource):
     @jwt_required()
     @marshal_with(predictionFields)
     def get(self):
-        predictions = Prediction.query.all()
+        user = get_jwt_identity()
+        predictions = Prediction.query.filter_by(user_id=user["id"]).all()
         return predictions, 200
 
     @jwt_required()
     def post(self):
+        user = get_jwt_identity()
         if "birad_images" not in request.files:
             return "empty", 400
 
         files = request.files.getlist("birad_images")
         predictions = preprocess(files)
 
+        current_app.logger.info(f"{user['email']} attempted to run image prediction")
         return predictions, 201
 
 
@@ -98,6 +101,9 @@ class SavePrediction(Resource):
 
         db.session.commit()
 
+        current_app.logger.info(
+            f"{current_user['email']} saved prediction result into database. Reference id: {new_prediction.id}"
+        )
         return {"message": "Prediction stored successfully"}, 201
 
 
