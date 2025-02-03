@@ -21,6 +21,17 @@ user_fields = {
     "phone": fields.String(attribute="phone_no"),
 }
 
+passParser = reqparse.RequestParser()
+passParser.add_argument(
+    "oldPass", type=str, required=True, help="Old password required"
+)
+passParser.add_argument(
+    "newPass", type=str, required=True, help="New password required"
+)
+passParser.add_argument(
+    "rePass", type=str, required=True, help="Retype password required"
+)
+
 
 class UserLogin(Resource):
     def post(self):
@@ -32,7 +43,7 @@ class UserLogin(Resource):
         if not email or not password:
             return {"message": "Email and password required"}, 400
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(email=email).first_or_404("User not found")
         identity = {
             "id": user.id,
             "role": user.role,
@@ -55,6 +66,24 @@ class UserLogin(Resource):
             }, 200
 
         return {"message": "Invalid credentials"}, 401
+
+    @jwt_required()
+    def put(self):
+        curr_user = get_jwt_identity()
+        args = passParser.parse_args()
+        user = User.query.filter_by(email=curr_user["email"]).first_or_404(
+            "Not found user"
+        )
+
+        if not f_bcrypt.check_password_hash(user.password, args["oldPass"]):
+            return {"message": "Invalid old password"}, 400
+        if args["newPass"] != args["rePass"]:
+            return ({"message": "Retype password must same"},)
+
+        user.password = f_bcrypt.generate_password_hash(args["newPass"])
+        db.session.commit()
+
+        return {"message": "Password changed successfully"}, 200
 
 
 class TokenRefresh(Resource):

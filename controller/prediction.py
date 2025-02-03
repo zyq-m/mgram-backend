@@ -17,6 +17,7 @@ predictionFields = {
     "id": fields.String,
     "icNo": fields.String(attribute="ic_no"),
     "timestamp": fields.String(attribute="created_at"),
+    "user": fields.Nested({"email": fields.String, "name": fields.String}),
 }
 
 
@@ -37,7 +38,10 @@ class PredictImage(Resource):
     def get(self):
         user = get_jwt_identity()
         args = request.args
-        predictions = Prediction.query.filter_by(user_id=user["id"])
+        predictions = Prediction.query
+
+        if user["role"] != "ADMIN":
+            predictions = predictions.filter_by(user_id=user["id"])
 
         if args.get("timestamp"):
             timestamp = datetime.strptime(args["timestamp"], "%Y-%m-%d")
