@@ -9,9 +9,10 @@ import numpy as np
 import tensorflow as tf
 from werkzeug.utils import secure_filename
 import os
+from datetime import datetime
 
 parser = reqparse.RequestParser()
-parser.add_argument("ic_no", type=str, help="help")
+parser.add_argument("timestamp", type=str, required=False)
 predictionFields = {
     "id": fields.String,
     "icNo": fields.String(attribute="ic_no"),
@@ -35,7 +36,16 @@ class PredictImage(Resource):
     @marshal_with(predictionFields)
     def get(self):
         user = get_jwt_identity()
-        predictions = Prediction.query.filter_by(user_id=user["id"]).all()
+        args = request.args
+        predictions = Prediction.query.filter_by(user_id=user["id"])
+
+        if args.get("timestamp"):
+            timestamp = datetime.strptime(args["timestamp"], "%Y-%m-%d")
+            predictions = predictions.filter(
+                Prediction.created_at.between(timestamp, timestamp)
+            )
+
+        predictions = predictions.all()
         return predictions, 200
 
     @jwt_required()
@@ -132,3 +142,29 @@ class ViewPrediction(Resource):
     def get(self, id):
         prediction = Prediction.query.filter_by(id=id).first()
         return prediction, 200
+
+
+from sqlalchemy import func
+
+
+class ChartPrediction(Resource):
+    @jwt_required()
+    def get(self):
+        user = get_jwt_identity()
+
+        data = (
+            db.session.query(
+                BIRADSImage.result,
+                func.count(BIRADSImage.result).label("count"),
+            )
+            .join(BIRADSImage.img_prediction)
+            .group_by(BIRADSImage.result)
+        )
+
+        if user["role"] == "USER":
+            data.filter(Prediction.user_id == user["id"])
+
+        data.all()
+
+        res = [{"birads": d.result, "count": d.count} for d in data]
+        return res, 200
