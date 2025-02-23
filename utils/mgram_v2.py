@@ -1,4 +1,3 @@
-import gradio as gr
 import tensorflow as tf
 import warnings
 import pathlib
