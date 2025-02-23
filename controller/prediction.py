@@ -76,9 +76,13 @@ class SavePrediction(Resource):
         files = request.files.getlist("birad_images")
         ic_no = request.form.get("ic_no")
 
+        upload_folder = current_app.config["UPLOAD_FOLDER"]
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+
         for file in files:
             filename = secure_filename(file.filename)
-            file.save(os.path.join(current_app.config["UPLOAD_FOLDER"], filename))
+            file.save(os.path.join(upload_folder, filename))
 
         predictions = preprocess(files)
         # response = [
